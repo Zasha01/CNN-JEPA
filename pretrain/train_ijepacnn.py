@@ -29,6 +29,7 @@ from timm.models.layers import trunc_normal_
 from timm.layers import LayerNorm2d
 
 from pretrain.trainer_common import LightlyModelMomentum, main_pretrain
+from pretrain.tactile_transforms import TactileIJEPATransform
 
 import models.sparse_encoder as sparse_encoder
 
@@ -101,7 +102,11 @@ class IJEPA_CNN(LightlyModelMomentum):
         self.criterion = F.smooth_l1_loss
 
     def setup_transform(self):
-        self.transform = IJEPATransform(self.input_size)
+        # Use tactile-specific transform for tactile data, otherwise use IJEPA transform
+        if self.cfg.data.dataset_name == "tactmat":
+            self.transform = TactileIJEPATransform(normalize=True)
+        else:
+            self.transform = IJEPATransform(self.input_size)
 
     def setup(self, stage: str) -> None:
         super().setup(stage)

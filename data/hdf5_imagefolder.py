@@ -77,12 +77,19 @@ class HDF5ImageFolder(Dataset):
 
   
 if __name__ == "__main__":
-    data_root = '/data'
-    dataset = 'imagenet-100'
-    # for split in ['val','train']:
-    #     dataset_root = os.path.join(data_root, dataset, split)
-    #     output_file = os.path.join(data_root, f'{dataset}-{split}.h5')
-    #     save_imagenet_to_hdf5(dataset_root, output_file, num_workers=4)
+    data_root = '/home/zakariea_sharfeddine_gmail_com/cnn-jepa/data' 
+    dataset_path = '/home/zakariea_sharfeddine_gmail_com/.cache/kagglehub/datasets/ambityga/imagenet100/versions/8/imagenet-100'
+    dataset_name = 'imagenet-100'
+
+    # Generate HDF5 files if they don't exist
+    for split in ['val','train']:
+        dataset_root = os.path.join(dataset_path, split)
+        output_file = os.path.join(data_root, f'{dataset_name}-{split}.h5')
+        if not os.path.exists(output_file):
+            print(f"Generating HDF5 file: {output_file}")
+            save_imagenet_to_hdf5(dataset_root, output_file, num_workers=4)
+        else:
+            print(f"HDF5 file already exists: {output_file}")
 
     # HDF5 file generation times
     # | Dataset      | Split | Time     |
@@ -94,7 +101,7 @@ if __name__ == "__main__":
 
     # Evaluate performance
     tracemalloc.start()
-    output_file = os.path.join(data_root, f'{dataset}-train.h5')
+    output_file = os.path.join(data_root, f'{dataset_name}-train.h5')
     transform = transforms.Compose([
         transforms.RandomResizedCrop(
             224, scale=(0.2, 1.0), interpolation=3
@@ -115,7 +122,7 @@ if __name__ == "__main__":
     print(f"Peak memory usage: {peak/10**6:.2f} MB")
 
     # Repeat with a standard ImageFolder dataset
-    # standard_dataset = datasets.ImageFolder(root=os.path.join(data_root, dataset, 'train'), transform=transform)
+    # standard_dataset = datasets.ImageFolder(root=os.path.join(dataset_path, 'train'), transform=transform)
     # standard_dataloader = DataLoader(standard_dataset, batch_size=32, shuffle=True, num_workers=12)
     # start = time.time()
     # for i, batch in tqdm(enumerate(standard_dataloader), total=len(standard_dataloader)):

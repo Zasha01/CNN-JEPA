@@ -4,7 +4,7 @@ container_name=ijepa
 data_path=/mnt/hdd2/datasets/
 
 run: build
-	nvidia-docker run \
+	docker run --gpus all \
 	-it --rm \
 	--shm-size 16G \
 	--network host \

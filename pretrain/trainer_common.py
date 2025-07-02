@@ -29,8 +29,8 @@ from pretrain.online_classification_benchmark import OnlineLinearClassificationB
 import utils
 
 from data.imagenette import Imagenette
-from data.cached_imagenet import CachedImageNet
 from data.hdf5_imagefolder import HDF5ImageFolder
+from data.tactmat_dataset import TactMatDataset
 
 class LightlyModel(pl.LightningModule):
     def __init__(self, cfg: DictConfig):
@@ -181,6 +181,7 @@ class LightlyModel(pl.LightningModule):
             "imagenette": Imagenette,
             "imagenet-100": HDF5ImageFolder, # Replaceable with torchvision.datasets.ImageFolder
             "imagenet-1k":  HDF5ImageFolder, # Replaceable with torchvision.datasets.ImageFolder
+            "tactmat": TactMatDataset,
         }
         train_dataset_kwargs = {
             "cifar10": dict(root="/data/cifar10", download=True),
@@ -189,6 +190,7 @@ class LightlyModel(pl.LightningModule):
             "imagenette": dict(root="/data/imagenette", split='train', download=True),
             "imagenet-100": dict(root="/data/imagenet-100-train.h5"),
             "imagenet-1k": dict(root="/data/imagenet-train.h5"),
+            "tactmat": dict(root=self.cfg.data.data_path, split='train'),
         }
         val_dataset_kwargs = {
             "cifar10": dict(root="/data/cifar10", train=False),
@@ -197,6 +199,7 @@ class LightlyModel(pl.LightningModule):
             "imagenette": dict(root="/data/imagenette", split='val'),
             "imagenet-100": dict(root="/data/imagenet-100-val.h5"),
             "imagenet-1k": dict(root="/data/imagenet-val.h5"),
+            "tactmat": dict(root=self.cfg.data.data_path, split='val'),
         }
         input_sizes = {
             "cifar10": 32,
@@ -205,6 +208,7 @@ class LightlyModel(pl.LightningModule):
             "imagenette": 224,
             "imagenet-100": 224,
             "imagenet-1k": 224,
+            "tactmat": 16,  # 16 flattened spatial features for tactile data
         }
         num_classes = {
             "cifar10": 10,
@@ -213,6 +217,7 @@ class LightlyModel(pl.LightningModule):
             "imagenette": 10,
             "imagenet-100": 100,
             "imagenet-1k": 1000,
+            "tactmat": 36,  # 36 different materials
         }
         self.dataset_class = dataset_classes[self.cfg.data.dataset_name]
         self.train_dataset_kwargs = train_dataset_kwargs[self.cfg.data.dataset_name]
