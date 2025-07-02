@@ -40,6 +40,7 @@ from pretrain.ijepa_mask import MultiBlockMask
 # import models.X does more than just importing the `models` module!
 # It also replaces some convnext models in the `timm` model registry with a ConvNext implementation that supports sparsity.
 import models.convnext
+import models.tactnet_jepa  # Register tactnet model with timm
 
 class IJEPA_CNN(LightlyModelMomentum):
     def __init__(self, cfg: DictConfig):
@@ -60,6 +61,10 @@ class IJEPA_CNN(LightlyModelMomentum):
             norm_cls = nn.BatchNorm2d
         elif self.cfg.backbone.name.lower().startswith('convnext'):
             norm_cls = LayerNorm2d
+        elif self.cfg.backbone.name.lower().startswith('tactnet'):
+            norm_cls = nn.BatchNorm2d  # TactNet uses BatchNorm2d
+        else:
+            norm_cls = nn.BatchNorm2d  # Default fallback
 
         if self.cfg.use_projection_head:
             proj_layers = []
