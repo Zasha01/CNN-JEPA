@@ -37,7 +37,7 @@ trainer:
   max_epochs: 101
   devices: "auto"
   accelerator: "gpu"
-  precision: "bf16"
+  precision: 16
   # sync_batchnorm: True
   accumulate_grad_batches: null # 4
   overfit_batches: 0.0 # 1
