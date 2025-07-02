@@ -96,7 +96,14 @@ class TactMatDataset(Dataset):
 
 if __name__ == "__main__":
     # Test the dataset
-    dataset_path = "tactmat.h5"
+    import os
+    # Check if we're in the data directory or need to look in data/
+    if os.path.exists("tactmat.h5"):
+        dataset_path = "tactmat.h5"
+    elif os.path.exists("data/tactmat.h5"):
+        dataset_path = "data/tactmat.h5"
+    else:
+        raise FileNotFoundError("tactmat.h5 not found in current directory or data/ directory")
     
     # Create train and val datasets
     train_dataset = TactMatDataset(dataset_path, split="train")
