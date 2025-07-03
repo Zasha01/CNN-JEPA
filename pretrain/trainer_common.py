@@ -208,7 +208,7 @@ class LightlyModel(pl.LightningModule):
             "imagenette": 224,
             "imagenet-100": 224,
             "imagenet-1k": 224,
-            "tactmat": 16,  # 16 flattened spatial features for tactile data
+            "tactmat": 1000,  # Temporal dimension for tactile data (1000 timesteps x 16 spatial features)
         }
         num_classes = {
             "cifar10": 10,

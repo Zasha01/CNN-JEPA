@@ -81,16 +81,25 @@ def log_example_inputs(views, log_label="train", num_examples=8):
     batch_size = views[0].shape[0]
     num_examples = min(num_examples, batch_size)
     selected_views = [view[:num_examples].cpu().numpy() for view in views]
-    max_size = np.max([view.shape[-1] for view in selected_views], axis=0)
-    selected_views = [
-        np.pad(view, ((0, 0), (0, 0), (0, max_size - view.shape[2]), (0, 0)))
-        for view in selected_views
-    ]
-    imgs = np.concatenate(selected_views, axis=-1).transpose(0, 2, 3, 1)
-    wandb_imgs = [wandb.Image(imgs[i]) for i in range(num_examples)]
+    
+    # Check if this is tactile data (4D with temporal dimension)
+    if len(selected_views[0].shape) == 4 and selected_views[0].shape[2] > 100:
+        # Tactile data: (B, 1, 1000, 16) - create time-series visualizations
+        log_tactile_examples(selected_views, log_label, num_examples)
+    else:
+        # Image data - original visualization logic
+        max_size = np.max([view.shape[-1] for view in selected_views], axis=0)
+        selected_views = [
+            np.pad(view, ((0, 0), (0, 0), (0, max(0, max_size - view.shape[2])), (0, 0)))
+            for view in selected_views
+        ]
+        imgs = np.concatenate(selected_views, axis=-1).transpose(0, 2, 3, 1)
+        wandb_imgs = [wandb.Image(imgs[i]) for i in range(num_examples)]
+        if wandb.run is not None:
+            wandb.log({f"examples/{log_label}": wandb_imgs})
+    
+    # Log statistics for all data types
     if wandb.run is not None:
-        wandb.log({f"examples/{log_label}": wandb_imgs})
-        # log x0 min and max, mean
         wandb.log(
             {
                 f"examples/{log_label}_x0_min": views[0].min(),
@@ -98,6 +107,41 @@ def log_example_inputs(views, log_label="train", num_examples=8):
                 f"examples/{log_label}_x0_mean": views[0].mean(),
             }
         )
+
+def log_tactile_examples(selected_views, log_label, num_examples):
+    """Log tactile data examples as time-series plots."""
+    if wandb.run is None:
+        return
+        
+    try:
+        import matplotlib.pyplot as plt
+        
+        # Create time-series plots for tactile data
+        for i in range(min(2, num_examples)):  # Log first 2 examples
+            fig, axes = plt.subplots(len(selected_views), 1, figsize=(12, 4 * len(selected_views)))
+            if len(selected_views) == 1:
+                axes = [axes]
+            
+            view_names = ['Original', 'Context', 'Target'][:len(selected_views)]
+            
+            for j, (view, name) in enumerate(zip(selected_views, view_names)):
+                # view shape: (B, 1, 1000, 16) - take sample i, squeeze channel, average across sensors
+                tactile_signal = view[i, 0, :, :].mean(axis=1)  # Average across 16 sensors -> (1000,)
+                
+                axes[j].plot(tactile_signal)
+                axes[j].set_title(f'{name} - Sample {i+1}')
+                axes[j].set_xlabel('Time Steps')
+                axes[j].set_ylabel('Avg Sensor Value')
+                axes[j].grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            wandb.log({f"examples/{log_label}_sample_{i+1}": wandb.Image(fig)})
+            plt.close(fig)
+            
+    except Exception as e:
+        # Fallback: just log basic statistics if plotting fails
+        print(f"Warning: Could not create tactile visualization: {e}")
+        pass
 
 @torch.no_grad()
 def eval_feature_descriptors(backbone: nn.Module, dataset, batch_size: int = 64, input_size: int = 224, cfg_name=None, current_epoch=None):

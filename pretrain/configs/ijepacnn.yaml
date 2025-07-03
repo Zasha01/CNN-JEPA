@@ -30,7 +30,7 @@ data:
   dataset_name: "tactmat"
   data_path: "data/tactmat.h5"
   num_workers: 4
-  input_size: 16  # 16 flattened spatial features (4x4 -> 16)
+  input_size: 1000  # Temporal dimension for tactile data (1000 timesteps x 16 spatial features)
   num_channels: 1
 
 trainer:

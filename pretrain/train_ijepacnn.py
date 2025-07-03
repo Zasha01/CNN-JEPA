@@ -48,7 +48,13 @@ class IJEPA_CNN(LightlyModelMomentum):
         if hasattr(self.backbone, 'sparse'):
             self.backbone.sparse = True
             self.backbone_momentum.sparse = False
-        self.backbone_sparse = sparse_encoder.dense_model_to_sparse(self.backbone)
+        
+        # For tactile data, use regular backbone instead of sparse encoder for now
+        # The sparse encoder is optimized for 2D image convolutions
+        if self.cfg.data.dataset_name == "tactmat":
+            self.backbone_sparse = self.backbone  # Use regular backbone
+        else:
+            self.backbone_sparse = sparse_encoder.dense_model_to_sparse(self.backbone)
 
         # The sparse backbone doesn't work for online eval (TODO_ fix this)
         # For now use the momentum backbone for online eval
@@ -119,31 +125,55 @@ class IJEPA_CNN(LightlyModelMomentum):
             self.downsample_raito = 32
         else:
             self.downsample_raito = self.backbone.get_downsample_ratio()
-        # if self.cfg.mask.strategy == "random":
-        self.fmap_h, self.fmap_w = self.input_size // self.downsample_raito, self.input_size //self. downsample_raito
+        
+        # Special handling for tactile data with asymmetric feature maps
+        if self.cfg.data.dataset_name == "tactmat":
+            # TactNet: (B, 1, 1000, 16) -> (B, 128, 1, 16)
+            # Feature map dimensions: (1, 16) representing (temporal, spatial)
+            # We want to mask in both temporal and spatial dimensions as 2D patches
+            self.fmap_h, self.fmap_w = 1, 16  # Final feature map size
+            self.temporal_downsample = 1000  # 1000 -> 1
+            self.spatial_downsample = 1      # 16 -> 16 (no spatial downsampling)
+        else:
+            # Regular 2D feature maps for images
+            self.fmap_h, self.fmap_w = self.input_size // self.downsample_raito, self.input_size // self.downsample_raito
+        
         self.len_keep = round(self.fmap_h * self.fmap_w * (1 - self.cfg.mask_ratio))
-        # elif self.cfg.mask.strategy == "multi-block":
-        self.multi_block_mask = MultiBlockMask(
-            input_size=self.input_size,
-            patch_size=self.downsample_raito,
-            **self.cfg.mask.mutli_block_kwargs
-        )
+        
+        # MultiBlockMask setup - only for non-tactile data
+        if self.cfg.data.dataset_name != "tactmat":
+            self.multi_block_mask = MultiBlockMask(
+                input_size=(self.fmap_h * self.downsample_raito, self.fmap_w * self.downsample_raito),
+                patch_size=self.downsample_raito,
+                **self.cfg.mask.mutli_block_kwargs
+            )
 
     def get_views_to_log_from_batch(self, batch):
         inp_bchw = batch[0]
         context_mask_b1ff, target_mask_b1ff = self.mask(inp_bchw.shape[0], inp_bchw.device)  # (B, 1, f, f)
-        context_mask_b1hw = context_mask_b1ff.repeat_interleave(self.downsample_raito, 2).repeat_interleave(self.downsample_raito, 3)  # (B, 1, H, W)
-        target_mask_b1hw  =  target_mask_b1ff.repeat_interleave(self.downsample_raito, 2).repeat_interleave(self.downsample_raito, 3)  # (B, 1, H, W)
+        
+        # Handle asymmetric dimensions for tactile data  
+        if self.cfg.data.dataset_name == "tactmat":
+            # For tactile: expand masks to input dimensions using temporal downsampling
+            context_mask_b1hw = context_mask_b1ff.repeat_interleave(self.temporal_downsample, 2)  # (B, 1, 1000, 16)
+            target_mask_b1hw = target_mask_b1ff.repeat_interleave(self.temporal_downsample, 2)    # (B, 1, 1000, 16)
+        else:
+            # Regular 2D expansion for images
+            context_mask_b1hw = context_mask_b1ff.repeat_interleave(self.downsample_raito, 2).repeat_interleave(self.downsample_raito, 3)  # (B, 1, H, W)
+            target_mask_b1hw  =  target_mask_b1ff.repeat_interleave(self.downsample_raito, 2).repeat_interleave(self.downsample_raito, 3)  # (B, 1, H, W)
+        
         context_bchw = inp_bchw * context_mask_b1hw
         target_bchw = inp_bchw * target_mask_b1hw
         return [inp_bchw, context_bchw, target_bchw]
     
     def contrastive_acc_eval(self, dataset, file_paths=None):
-        sparse_encoder._cur_active = torch.ones_like(sparse_encoder._cur_active)
+        if self.cfg.data.dataset_name != "tactmat" and sparse_encoder._cur_active is not None:
+            sparse_encoder._cur_active = torch.ones_like(sparse_encoder._cur_active)
         return contrastive_acc_eval(self.backbone_momentum, dataset, input_size=self.input_size)
     
     def eval_feature_descriptors(self, dataset):
-        sparse_encoder._cur_active = torch.ones_like(sparse_encoder._cur_active)
+        if self.cfg.data.dataset_name != "tactmat" and sparse_encoder._cur_active is not None:
+            sparse_encoder._cur_active = torch.ones_like(sparse_encoder._cur_active)
         return eval_feature_descriptors(
             self.backbone_momentum,
             dataset,
@@ -158,13 +188,19 @@ class IJEPA_CNN(LightlyModelMomentum):
     #     super().on_validation_epoch_end()
     
     def mask(self, B: int, device, generator=None):
-        if self.cfg.mask.strategy == "mixed":
-            if torch.rand(1) < self.cfg.mask.mixed_mutli_block_ratio:
-                strategy = "multi-block"
-            else:
-                strategy = "random"
+        # For tactile data, always use simple random masking
+        # MultiBlockMask is designed for 2D images and may hang with asymmetric (1,16) feature maps
+        if self.cfg.data.dataset_name == "tactmat":
+            strategy = "random"
         else:
-            strategy = self.cfg.mask.strategy
+            if self.cfg.mask.strategy == "mixed":
+                if torch.rand(1) < self.cfg.mask.mixed_mutli_block_ratio:
+                    strategy = "multi-block"
+                else:
+                    strategy = "random"
+            else:
+                strategy = self.cfg.mask.strategy
+        
         if strategy == "random":
             h, w = self.fmap_h, self.fmap_w
             idx = torch.rand(B, h * w, generator=generator).argsort(dim=1)
@@ -183,8 +219,22 @@ class IJEPA_CNN(LightlyModelMomentum):
         inp_bchw = x
         # step1. Mask
         context_mask_b1ff, target_mask_b1ff  = self.mask(inp_bchw.shape[0], inp_bchw.device)  # (B, 1, f, f)
-        sparse_encoder._cur_active = context_mask_b1ff    # (B, 1, f, f)
-        active_b1hw = context_mask_b1ff.repeat_interleave(self.downsample_raito, 2).repeat_interleave(self.downsample_raito, 3)  # (B, 1, H, W)
+        
+        # Set sparse encoder active mask (only if using sparse encoding)
+        if self.cfg.data.dataset_name != "tactmat":
+            sparse_encoder._cur_active = context_mask_b1ff    # (B, 1, f, f)
+        
+        # Handle asymmetric dimensions for tactile data
+        if self.cfg.data.dataset_name == "tactmat":
+            # For tactile: input is (B, 1, 1000, 16), mask is (B, 1, 1, 16)
+            # Expand mask to input dimensions: (B, 1, 1000, 16)
+            # Temporal expansion: repeat each mask element 1000 times along temporal dimension
+            # Spatial: no expansion needed (16 -> 16)
+            active_b1hw = context_mask_b1ff.repeat_interleave(self.temporal_downsample, 2)  # (B, 1, 1000, 16)
+        else:
+            # Regular 2D expansion for images
+            active_b1hw = context_mask_b1ff.repeat_interleave(self.downsample_raito, 2).repeat_interleave(self.downsample_raito, 3)  # (B, 1, H, W)
+        
         masked_bchw = inp_bchw * active_b1hw
         
         # step2. Encode

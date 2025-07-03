@@ -102,6 +102,8 @@ if __name__ == "__main__":
         dataset_path = "tactmat.h5"
     elif os.path.exists("data/tactmat.h5"):
         dataset_path = "data/tactmat.h5"
+    elif os.path.exists("/home/zakariea_sharfeddine_gmail_com/.cache/kagglehub/datasets/ambityga/tactmat/versions/1/tactmat.h5"):
+        dataset_path = "/home/zakariea_sharfeddine_gmail_com/.cache/kagglehub/datasets/ambityga/tactmat/versions/1/tactmat.h5"
     else:
         raise FileNotFoundError("tactmat.h5 not found in current directory or data/ directory")
     

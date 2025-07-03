@@ -77,10 +77,11 @@ class TactNet(nn.Module):
         self.num_features = 128  # Output channels of last conv layer
 
     def get_downsample_ratio(self) -> int:
-        # For JEPA masking, we want to think of the 16 spatial features as a 4x4 grid
-        # So the effective downsample ratio should be 4 (16 -> 4x4 conceptually)
-        # This allows JEPA to mask patches in the spatial domain
-        return 4  # Treat as 4x4 spatial grid for masking purposes
+        # For tactile data: (B, 1, 1000, 16) -> (B, 128, 1, 16)
+        # Temporal downsampling: 1000 -> 1 (ratio = 1000)  
+        # Spatial downsampling: 16 -> 16 (ratio = 1)
+        # Return temporal downsampling ratio for JEPA masking
+        return 1000  # MaxPool2d with (10,1) applied 3 times: 10*10*10 = 1000
 
     def get_feature_map_channels(self) -> List[int]:
         # Output channels after each MaxPool2d
